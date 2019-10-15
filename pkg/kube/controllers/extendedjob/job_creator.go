@@ -20,7 +20,6 @@ import (
 	"code.cloudfoundry.org/quarks-utils/pkg/config"
 	"code.cloudfoundry.org/quarks-utils/pkg/ctxlog"
 	"code.cloudfoundry.org/quarks-utils/pkg/names"
-	"code.cloudfoundry.org/quarks-utils/pkg/pointers"
 	vss "code.cloudfoundry.org/quarks-utils/pkg/versionedsecretstore"
 )
 
@@ -88,8 +87,8 @@ func (j jobCreatorImpl) Create(ctx context.Context, eJob ejv1.ExtendedJob, names
 		},
 	}
 
-	// Set serviceaccount to the pod
-	template.Spec.ServiceAccountName = serviceAccountName
+	// Set ServiceAccount to the pod
+	template.Spec.Template.Spec.ServiceAccountName = serviceAccountName
 
 	err = j.client.Create(ctx, serviceAccount)
 	if err != nil {
@@ -120,21 +119,21 @@ func (j jobCreatorImpl) Create(ctx context.Context, eJob ejv1.ExtendedJob, names
 	}
 
 	// Loop through containers and add quarks logging volume specs.
-	for containerIndex, container := range template.Spec.Containers {
+	for containerIndex, container := range template.Spec.Template.Spec.Containers {
 
 		// Add pod volume specs to the pod
 		podVolumeSpec := corev1.Volume{
 			Name:         names.Sanitize(fmt.Sprintf("%s%s", "output-", container.Name)),
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		}
-		template.Spec.Volumes = append(template.Spec.Volumes, podVolumeSpec)
+		template.Spec.Template.Spec.Volumes = append(template.Spec.Template.Spec.Volumes, podVolumeSpec)
 
 		// Add container volume specs to continer
 		containerVolumeMountSpec := corev1.VolumeMount{
 			Name:      names.Sanitize(fmt.Sprintf("%s%s", "output-", container.Name)),
 			MountPath: mountPath,
 		}
-		template.Spec.Containers[containerIndex].VolumeMounts = append(template.Spec.Containers[containerIndex].VolumeMounts, containerVolumeMountSpec)
+		template.Spec.Template.Spec.Containers[containerIndex].VolumeMounts = append(template.Spec.Template.Spec.Containers[containerIndex].VolumeMounts, containerVolumeMountSpec)
 
 		// Add container volume spec to output persist container
 		containerVolumeMountSpec.MountPath = filepath.Join(mountPath, container.Name)
@@ -142,14 +141,14 @@ func (j jobCreatorImpl) Create(ctx context.Context, eJob ejv1.ExtendedJob, names
 	}
 
 	// Add output persist container to the pod template
-	template.Spec.Containers = append(template.Spec.Containers, outputPersistContainer)
+	template.Spec.Template.Spec.Containers = append(template.Spec.Template.Spec.Containers, outputPersistContainer)
 
-	if template.Labels == nil {
-		template.Labels = map[string]string{}
+	if template.Spec.Template.Labels == nil {
+		template.Spec.Template.Labels = map[string]string{}
 	}
-	template.Labels[ejv1.LabelEJobName] = eJob.Name
+	template.Spec.Template.Labels[ejv1.LabelEJobName] = eJob.Name
 
-	err = j.store.SetSecretReferences(ctx, eJob.Namespace, &template.Spec)
+	err = j.store.SetSecretReferences(ctx, eJob.Namespace, &template.Spec.Template.Spec)
 	if err != nil {
 		return
 	}
@@ -197,18 +196,13 @@ func (j jobCreatorImpl) Create(ctx context.Context, eJob ejv1.ExtendedJob, names
 		return false, errors.Wrapf(err, "could not generate job name for eJob '%s'", eJob.Name)
 	}
 
-	backoffLimit := pointers.Int32(2)
-
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: eJob.Namespace,
 			Labels:    map[string]string{ejv1.LabelExtendedJob: "true"},
 		},
-		Spec: batchv1.JobSpec{
-			Template:     *template,
-			BackoffLimit: backoffLimit,
-		},
+		Spec: template.Spec,
 	}
 
 	err = j.setOwnerReference(&eJob, job, j.scheme)
