@@ -12,4 +12,5 @@ lint:
 	bin/lint
 
 gen-command-docs:
+	rm -f docs/commands/*
 	go run cmd/docs/gen-command-docs.go
