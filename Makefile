@@ -10,3 +10,6 @@ test-cluster:
 
 lint:
 	bin/lint
+
+build-image:
+	bin/build-image
