@@ -51,8 +51,9 @@ var _ = Describe("CLI", func() {
 			session, err := act("help")
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(session.Out).Should(Say(`Available Commands:
-  help        Help about any command
-  version     Print the version number
+  help           Help about any command
+  persist-output Persist a file into a kube secret
+  version        Print the version number
 
 `))
 		})
